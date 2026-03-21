@@ -1,0 +1,571 @@
+openapi: 3.1.0
+info:
+    title: Task Manager API
+    version: 1.0.0
+paths:
+    /api/v1/auth/login:
+        post:
+            summary: Войти
+            description: Возвращает JWT по логину и паролю.
+            tags:
+                - auth
+            security: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/LoginRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LoginResponse'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/auth/refresh:
+        post:
+            summary: Обновить токен
+            tags:
+                - auth
+            security:
+                - bearer: []
+            parameters:
+                - name: Authorization
+                  in: header
+                  description: Bearer <токен>
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LoginResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/tasks:
+        get:
+            summary: Список задач
+            description: Поддерживает фильтрацию по статусу и приоритету, пагинацию.
+            tags:
+                - tasks
+            parameters:
+                - name: status
+                  in: query
+                  description: todo | in_progress | done
+                  required: false
+                  schema:
+                    type: string
+                  example: todo
+                - name: priority
+                  in: query
+                  description: 1-3
+                  required: false
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page
+                  in: query
+                  required: false
+                  schema:
+                    type: integer
+                    format: int32
+                  example: "1"
+                - name: page_size
+                  in: query
+                  required: false
+                  schema:
+                    type: integer
+                    format: int32
+                  example: "20"
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTasksResponse'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        post:
+            summary: Создать задачу
+            tags:
+                - tasks
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTaskRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskDTO'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "422":
+                    description: Unprocessable Entity
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/tasks/{id}:
+        get:
+            summary: Задача по ID
+            tags:
+                - tasks
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+                  example: "42"
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskDTO'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        put:
+            summary: Обновить задачу
+            tags:
+                - tasks
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTaskRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskDTO'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "422":
+                    description: Unprocessable Entity
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        delete:
+            summary: Удалить задачу
+            description: Только создатель задачи или администратор.
+            tags:
+                - tasks
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+                  example: "42"
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeleteTaskResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/tasks/{task_id}/comments:
+        get:
+            summary: Комментарии к задаче
+            tags:
+                - comments
+            parameters:
+                - name: task_id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+                  example: "42"
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCommentsResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+        post:
+            summary: Добавить комментарий
+            tags:
+                - comments
+            parameters:
+                - name: task_id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+                  example: "42"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddCommentRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommentDTO'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+security:
+    - bearer: []
+components:
+    schemas:
+        AddCommentRequest:
+            type: object
+            properties:
+                body:
+                    type: string
+                    example: 'Смотрел логи — это регрессия из #1337'
+            required:
+                - body
+        CommentDTO:
+            type: object
+            properties:
+                author:
+                    $ref: '#/components/schemas/UserBrief'
+                body:
+                    type: string
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: integer
+                    format: int64
+                task_id:
+                    type: integer
+                    format: int64
+        CreateTaskRequest:
+            type: object
+            properties:
+                assignee_id:
+                    type: integer
+                    format: int64
+                description:
+                    type: string
+                    example: OOM killer убил сервис около 03:00
+                priority:
+                    type: integer
+                    format: int32
+                    description: 1-3
+                    example: "3"
+                title:
+                    type: string
+                    example: Упал прод
+            required:
+                - title
+        DeleteTaskResponse:
+            type: object
+            properties:
+                id:
+                    type: integer
+                    format: int64
+                success:
+                    type: boolean
+        ErrorResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                    description: Human-readable error message
+            required:
+                - error
+        ListCommentsResponse:
+            type: object
+            properties:
+                comments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CommentDTO'
+                total:
+                    type: integer
+                    format: int32
+        ListTasksResponse:
+            type: object
+            properties:
+                page:
+                    type: integer
+                    format: int32
+                page_size:
+                    type: integer
+                    format: int32
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TaskDTO'
+                total:
+                    type: integer
+                    format: int32
+        LoginRequest:
+            type: object
+            properties:
+                password:
+                    type: string
+                    example: nosomword
+                username:
+                    type: string
+                    example: larry
+            required:
+                - username
+                - password
+        LoginResponse:
+            type: object
+            properties:
+                expires_in:
+                    type: integer
+                    format: int32
+                    example: "3600"
+                token:
+                    type: string
+        TaskDTO:
+            type: object
+            properties:
+                assigned_to:
+                    $ref: '#/components/schemas/UserBrief'
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                id:
+                    type: integer
+                    format: int64
+                priority:
+                    type: integer
+                    format: int32
+                    description: 1 — низкий, 3 — высокий
+                status:
+                    type: string
+                    description: todo | in_progress | done
+                title:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+        UpdateTaskRequest:
+            type: object
+            properties:
+                assignee_id:
+                    type: integer
+                    format: int64
+                description:
+                    type: string
+                priority:
+                    type: integer
+                    format: int32
+                status:
+                    type: string
+                    example: in_progress
+                title:
+                    type: string
+        UserBrief:
+            type: object
+            properties:
+                id:
+                    type: integer
+                    format: int64
+                username:
+                    type: string
+    securitySchemes:
+        bearer:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+            description: 'JWT Bearer token — pass as: Authorization: Bearer <token>'

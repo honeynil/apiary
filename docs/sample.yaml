@@ -1,0 +1,304 @@
+openapi: 3.1.0
+info:
+    title: Sample API
+    version: 0.1.0
+paths:
+    /api/v1/auth/telegram:
+        post:
+            summary: Аутентификация через Telegram
+            description: Принимает initData из Telegram WebApp, верифицирует HMAC-SHA256 подпись.
+            tags:
+                - auth
+            security: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TelegramAuthRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TelegramAuthResponse'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/products:
+        get:
+            summary: Список товаров
+            description: Поддерживает пагинацию и полнотекстовый поиск. Цены возвращаются в валюте из заголовка X-Currency.
+            tags:
+                - products
+            parameters:
+                - name: X-Currency
+                  in: header
+                  description: Валюта цен (ISO 4217)
+                  required: false
+                  schema:
+                    type: string
+                  example: RUB
+                - name: page
+                  in: query
+                  required: false
+                  schema:
+                    type: integer
+                    format: int32
+                  example: "1"
+                - name: page_size
+                  in: query
+                  required: false
+                  schema:
+                    type: integer
+                    format: int32
+                  example: "20"
+                - name: search
+                  in: query
+                  required: false
+                  schema:
+                    type: string
+                  example: ноутбук
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListProductsResponse'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/users:
+        post:
+            summary: Создать пользователя
+            tags:
+                - users
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserRequest'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserResponse'
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "409":
+                    description: Conflict
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/v1/users/{id}:
+        get:
+            summary: Профиль пользователя
+            tags:
+                - users
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int64
+                  example: "42"
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserResponse'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "404":
+                    description: Not Found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                "500":
+                    description: Internal Server Error
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /health:
+        get:
+            summary: Healthcheck
+            tags:
+                - infra
+            security: []
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+security:
+    - bearer: []
+components:
+    schemas:
+        CreateUserRequest:
+            type: object
+            properties:
+                email:
+                    type: string
+                    example: larry@example.com
+                first_name:
+                    type: string
+                    example: Ларри
+                last_name:
+                    type: string
+                    example: Сомик
+                username:
+                    type: string
+                    example: larry_somik
+            required:
+                - username
+                - email
+        ErrorResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                    description: Human-readable error message
+            required:
+                - error
+        HealthResponse:
+            type: object
+            properties:
+                status:
+                    type: string
+                    example: ok
+                version:
+                    type: string
+                    example: 1.2.3
+        ListProductsResponse:
+            type: object
+            properties:
+                page:
+                    type: integer
+                    format: int32
+                page_size:
+                    type: integer
+                    format: int32
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProductDTO'
+                total:
+                    type: integer
+                    format: int32
+        ProductDTO:
+            type: object
+            properties:
+                description:
+                    type: string
+                id:
+                    type: integer
+                    format: int64
+                in_stock:
+                    type: boolean
+                name:
+                    type: string
+                price:
+                    type: number
+                    format: double
+                    example: "1990.00"
+        TelegramAuthRequest:
+            type: object
+            properties:
+                init_data:
+                    type: string
+                    description: initData из Telegram WebApp
+                    example: query_id=AAH4pFf...
+            required:
+                - init_data
+        TelegramAuthResponse:
+            type: object
+            properties:
+                expires_in:
+                    type: integer
+                    format: int32
+                    description: TTL токена в секундах
+                    example: "3600"
+                is_new_user:
+                    type: boolean
+                user:
+                    $ref: '#/components/schemas/UserDTO'
+        UserDTO:
+            type: object
+            properties:
+                first_name:
+                    type: string
+                id:
+                    type: integer
+                    format: int64
+                last_name:
+                    type: string
+                username:
+                    type: string
+        UserResponse:
+            type: object
+            properties:
+                user:
+                    $ref: '#/components/schemas/UserDTO'
+    securitySchemes:
+        bearer:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+            description: 'JWT Bearer token — pass as: Authorization: Bearer <token>'
