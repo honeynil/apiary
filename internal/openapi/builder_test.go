@@ -18,8 +18,8 @@ func TestBuild_BasicOperation(t *testing.T) {
 				Tags:    []string{"auth"},
 				Errors:  []int{400, 401},
 			},
-			RequestType:  "AuthRequest",
-			ResponseType: "AuthResponse",
+			RequestType:  &parser.TypeRef{Name: "AuthRequest"},
+			ResponseType: &parser.TypeRef{Name: "AuthResponse"},
 		},
 	}
 
@@ -108,8 +108,8 @@ func TestBuild_GetWithQueryParams(t *testing.T) {
 				Path:    "/api/v1/users",
 				Summary: "List users",
 			},
-			RequestType:  "ListRequest",
-			ResponseType: "ListResponse",
+			RequestType:  &parser.TypeRef{Name: "ListRequest"},
+			ResponseType: &parser.TypeRef{Name: "ListResponse"},
 		},
 	}
 
@@ -170,8 +170,8 @@ func TestBuild_PathParameters(t *testing.T) {
 				Summary: "Get user",
 				Errors:  []int{404},
 			},
-			RequestType:  "GetUserRequest",
-			ResponseType: "UserResponse",
+			RequestType:  &parser.TypeRef{Name: "GetUserRequest"},
+			ResponseType: &parser.TypeRef{Name: "UserResponse"},
 		},
 	}
 
@@ -225,13 +225,13 @@ func TestBuild_MultipleOperations(t *testing.T) {
 	ops := []*parser.OperationInfo{
 		{
 			Annotation:   &annotation.Operation{Method: "GET", Path: "/foo"},
-			RequestType:  "FooReq",
-			ResponseType: "FooResp",
+			RequestType:  &parser.TypeRef{Name: "FooReq"},
+			ResponseType: &parser.TypeRef{Name: "FooResp"},
 		},
 		{
 			Annotation:   &annotation.Operation{Method: "POST", Path: "/bar"},
-			RequestType:  "BarReq",
-			ResponseType: "BarResp",
+			RequestType:  &parser.TypeRef{Name: "BarReq"},
+			ResponseType: &parser.TypeRef{Name: "BarResp"},
 		},
 	}
 

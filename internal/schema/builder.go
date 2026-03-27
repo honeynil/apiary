@@ -11,11 +11,12 @@ import (
 // Schema is a subset of JSON Schema Draft 2020-12 used by OpenAPI 3.1.
 type Schema struct {
 	Ref                  string             `yaml:"$ref,omitempty"`
+	AllOf                []*Schema          `yaml:"allOf,omitempty"`
 	Type                 string             `yaml:"type,omitempty"`
 	Format               string             `yaml:"format,omitempty"`
 	Description          string             `yaml:"description,omitempty"`
-	Example              interface{}        `yaml:"example,omitempty"`
-	Default              interface{}        `yaml:"default,omitempty"`
+	Example              any                `yaml:"example,omitempty"`
+	Default              any                `yaml:"default,omitempty"`
 	Properties           map[string]*Schema `yaml:"properties,omitempty"`
 	AdditionalProperties *Schema            `yaml:"additionalProperties,omitempty"`
 	Items                *Schema            `yaml:"items,omitempty"`
@@ -122,11 +123,18 @@ func (b *Builder) ensureComponent(name string) {
 	b.processing[name] = true
 	defer func() { delete(b.processing, name) }()
 
-	schema := &Schema{
+	// Handle embedded structs via allOf.
+	var allOf []*Schema
+	for _, embName := range typeInfo.Embedded {
+		b.ensureComponent(embName)
+		allOf = append(allOf, &Schema{Ref: "#/components/schemas/" + embName})
+	}
+
+	// Own fields → properties object.
+	ownSchema := &Schema{
 		Type:       "object",
 		Properties: make(map[string]*Schema),
 	}
-
 	var required []string
 	for _, field := range typeInfo.Fields {
 		// Path, query and header params are represented as OpenAPI parameters,
@@ -139,17 +147,25 @@ func (b *Builder) ensureComponent(name string) {
 		if jsonName == "" {
 			jsonName = strings.ToLower(field.Name[:1]) + field.Name[1:]
 		}
-		schema.Properties[jsonName] = fieldSchema
+		ownSchema.Properties[jsonName] = fieldSchema
 		if field.Required {
 			required = append(required, jsonName)
 		}
 	}
 	if len(required) > 0 {
-		schema.Required = required
+		ownSchema.Required = required
 	}
 
 	// Register before returning so recursive refs can resolve.
-	b.components[name] = schema
+	if len(allOf) > 0 {
+		// Merge: embedded refs + own properties (only if non-empty).
+		if len(ownSchema.Properties) > 0 {
+			allOf = append(allOf, ownSchema)
+		}
+		b.components[name] = &Schema{AllOf: allOf}
+	} else {
+		b.components[name] = ownSchema
+	}
 }
 
 func (b *Builder) buildFieldSchema(field *parser.FieldInfo) *Schema {
@@ -197,9 +213,29 @@ func primitiveSchema(name string) *Schema {
 		return &Schema{Type: "string", Format: "date-time"}
 	case "time.Duration":
 		return &Schema{Type: "integer", Format: "int64"}
+	case "uuid.UUID", "uuid.NullUUID":
+		return &Schema{Type: "string", Format: "uuid"}
+	case "net.IP":
+		return &Schema{Type: "string", Format: "ipv4"}
+	case "url.URL":
+		return &Schema{Type: "string", Format: "uri"}
+	case "json.RawMessage":
+		return &Schema{} // any
+	case "sql.NullString":
+		return &Schema{Type: "string"}
+	case "sql.NullInt32":
+		return &Schema{Type: "integer", Format: "int32"}
+	case "sql.NullInt64":
+		return &Schema{Type: "integer", Format: "int64"}
+	case "sql.NullFloat64":
+		return &Schema{Type: "number", Format: "double"}
+	case "sql.NullBool":
+		return &Schema{Type: "boolean"}
+	case "sql.NullTime":
+		return &Schema{Type: "string", Format: "date-time"}
 	}
 
-	// Unknown package-qualified type (e.g. uuid.UUID) — treat as string.
+	// Unknown package-qualified type — treat as string (best-effort fallback).
 	if strings.Contains(name, ".") {
 		return &Schema{Type: "string"}
 	}

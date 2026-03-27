@@ -16,8 +16,8 @@ import (
 // OperationInfo holds everything extracted from a single annotated function.
 type OperationInfo struct {
 	Annotation   *annotation.Operation
-	RequestType  string // name of the request struct
-	ResponseType string // name of the response struct
+	RequestType  *TypeRef // nil if no request body
+	ResponseType *TypeRef // nil if no response body schema
 }
 
 // Parser accumulates type definitions and operations from Go source files.
@@ -124,6 +124,16 @@ func (p *Parser) parseFunction(fn *ast.FuncDecl) *OperationInfo {
 		return nil
 	}
 
+	// Gin-style handler: func(c *gin.Context) — no return types.
+	// Types must come from annotation request:/response: fields.
+	if isGinHandler(fn) {
+		return &OperationInfo{
+			Annotation:   op,
+			RequestType:  parseAnnotationTypeRef(op.Request),
+			ResponseType: parseAnnotationTypeRef(op.Response),
+		}
+	}
+
 	// Supported signatures (results must always be (R, error)):
 	//   (ctx context.Context, req T) (R, error)  — standard
 	//   (req T) (R, error)                        — no ctx
@@ -145,7 +155,7 @@ func (p *Parser) parseFunction(fn *ast.FuncDecl) *OperationInfo {
 		return nil
 	}
 
-	var reqTypeName string
+	var reqRef *TypeRef
 	if fn.Type.Params != nil {
 		params := fn.Type.Params.List
 		switch len(params) {
@@ -154,32 +164,79 @@ func (p *Parser) parseFunction(fn *ast.FuncDecl) *OperationInfo {
 		case 1:
 			if !isContextType(params[0].Type) {
 				// (req T) (R, error) — no ctx, has request
-				ref := parseTypeExpr(params[0].Type)
-				if ref == nil {
+				reqRef = parseTypeExpr(params[0].Type)
+				if reqRef == nil {
 					return nil
 				}
-				reqTypeName = typeName(ref)
 			}
 			// else: (ctx) (R, error) — ctx only, no request
 		case 2:
 			if !isContextType(params[0].Type) {
 				return nil // first param must be context when there are 2 params
 			}
-			ref := parseTypeExpr(params[1].Type)
-			if ref == nil {
+			reqRef = parseTypeExpr(params[1].Type)
+			if reqRef == nil {
 				return nil
 			}
-			reqTypeName = typeName(ref)
 		default:
 			return nil // more than 2 params — not supported
 		}
 	}
 
+	// Annotation request:/response: fields override inferred types.
+	if ann := parseAnnotationTypeRef(op.Request); ann != nil {
+		reqRef = ann
+	}
+	if ann := parseAnnotationTypeRef(op.Response); ann != nil {
+		respRef = ann
+	}
+
 	return &OperationInfo{
 		Annotation:   op,
-		RequestType:  reqTypeName,
-		ResponseType: typeName(respRef),
+		RequestType:  reqRef,
+		ResponseType: respRef,
 	}
+}
+
+// isGinHandler returns true when fn has the gin handler signature:
+// func(...) with a single *gin.Context parameter and no return values.
+func isGinHandler(fn *ast.FuncDecl) bool {
+	if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 {
+		return false
+	}
+	if fn.Type.Params == nil || len(fn.Type.Params.List) != 1 {
+		return false
+	}
+	param := fn.Type.Params.List[0]
+	expr := param.Type
+	// Accept *gin.Context
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "gin" && sel.Sel.Name == "Context"
+}
+
+// parseAnnotationTypeRef converts an annotation type string to a TypeRef.
+// Handles "TypeName", "[]TypeName", and "*TypeName".
+// Returns nil for empty input.
+func parseAnnotationTypeRef(s string) *TypeRef {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if strings.HasPrefix(s, "[]") {
+		elem := strings.TrimPrefix(s, "[]")
+		return &TypeRef{Name: "array", IsSlice: true, Elem: &TypeRef{Name: strings.TrimSpace(elem)}}
+	}
+	if strings.HasPrefix(s, "*") {
+		return &TypeRef{Name: strings.TrimPrefix(s, "*"), IsPtr: true}
+	}
+	return &TypeRef{Name: s}
 }
 
 // isContextType returns true when expr is context.Context.
@@ -196,12 +253,4 @@ func isContextType(expr ast.Expr) bool {
 func isErrorType(expr ast.Expr) bool {
 	id, ok := expr.(*ast.Ident)
 	return ok && id.Name == "error"
-}
-
-// typeName returns the base (non-ptr, non-slice) type name from a TypeRef.
-func typeName(ref *TypeRef) string {
-	if ref == nil {
-		return ""
-	}
-	return ref.Name
 }

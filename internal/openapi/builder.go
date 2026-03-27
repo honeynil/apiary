@@ -30,33 +30,44 @@ var builtinSchemes = map[string]*SecurityScheme{
 	},
 }
 
-// Builder assembles an OpenAPI 3.1 document from parsed operations.
-type Builder struct {
-	title    string
-	version  string
-	security []string // global scheme names, e.g. ["bearer"]
+type securityEntry struct {
+	name    string // key used in the document (like "adminAuth")
+	builtin string // builtin type: "bearer", "basic", "apikey"
 }
 
-// NewBuilder returns a Builder configured with the given API title and version.
+// Builder assembles an OpenAPI 3.1 document from parsed operations.
+type Builder struct {
+	title       string
+	version     string
+	description string
+	security    []securityEntry
+}
+
 func NewBuilder(title, version string) *Builder {
 	return &Builder{title: title, version: version}
 }
 
-// WithSecurity configures one or more global security schemes.
-// Accepted names: "bearer", "basic", "apikey".
-func (b *Builder) WithSecurity(schemes ...string) *Builder {
-	b.security = append(b.security, schemes...)
+func (b *Builder) WithDescription(desc string) *Builder {
+	b.description = desc
 	return b
 }
 
-// Build constructs and returns the complete OpenAPI document.
+func (b *Builder) WithSecurity(scheme string) *Builder {
+	name, builtin, found := strings.Cut(scheme, ":")
+	if !found {
+		builtin = name
+	}
+	b.security = append(b.security, securityEntry{name: name, builtin: builtin})
+	return b
+}
+
 func (b *Builder) Build(operations []*parser.OperationInfo, types map[string]*parser.TypeInfo) (*OpenAPI, error) {
 	sb := schema.NewBuilder(types)
 	sb.EnsureErrorResponse()
 
 	spec := &OpenAPI{
 		OpenAPI: "3.1.0",
-		Info:    Info{Title: b.title, Version: b.version},
+		Info:    Info{Title: b.title, Version: b.version, Description: b.description},
 		Paths:   make(map[string]PathItem),
 	}
 
@@ -93,14 +104,14 @@ func (b *Builder) Build(operations []*parser.OperationInfo, types map[string]*pa
 	if len(b.security) > 0 {
 		components.SecuritySchemes = make(map[string]*SecurityScheme)
 		var globalReqs []SecurityRequirement
-		for _, name := range b.security {
-			scheme, ok := builtinSchemes[strings.ToLower(name)]
+		for _, entry := range b.security {
+			scheme, ok := builtinSchemes[strings.ToLower(entry.builtin)]
 			if !ok {
-				log.Printf("apiary: warning: unknown security scheme %q (supported: bearer, basic, apikey)", name)
+				log.Printf("apiary: warning: unknown security scheme type %q (supported: bearer, basic, apikey)", entry.builtin)
 				continue
 			}
-			components.SecuritySchemes[name] = scheme
-			globalReqs = append(globalReqs, SecurityRequirement{name: {}})
+			components.SecuritySchemes[entry.name] = scheme
+			globalReqs = append(globalReqs, SecurityRequirement{entry.name: {}})
 		}
 		if len(globalReqs) > 0 {
 			spec.Security = globalReqs
@@ -143,72 +154,60 @@ func (b *Builder) buildOperation(
 		}
 	}
 
-	// ---- Request handling ------------------------------------------------
-	if opInfo.RequestType != "" {
-		typeInfo := types[opInfo.RequestType]
+	if opInfo.RequestType != nil {
+		reqRef := opInfo.RequestType
 
-		var pathFields, queryFields, headerFields, bodyFields []*parser.FieldInfo
-		if typeInfo != nil {
-			for _, f := range typeInfo.Fields {
-				switch {
-				case f.PathParam != "":
-					pathFields = append(pathFields, f)
-				case f.QueryParam != "":
-					queryFields = append(queryFields, f)
-				case f.Header != "":
-					headerFields = append(headerFields, f)
-				default:
-					bodyFields = append(bodyFields, f)
+		if reqRef.IsSlice || reqRef.IsMap {
+			op.RequestBody = &RequestBody{
+				Required: true,
+				Content: map[string]*MediaType{
+					"application/json": {Schema: sb.BuildSchema(reqRef)},
+				},
+			}
+		} else {
+			typeInfo := types[reqRef.Name]
+
+			var pathFields, queryFields, headerFields, bodyFields []*parser.FieldInfo
+			if typeInfo != nil {
+				for _, f := range typeInfo.Fields {
+					switch {
+					case f.PathParam != "":
+						pathFields = append(pathFields, f)
+					case f.QueryParam != "":
+						queryFields = append(queryFields, f)
+					case f.Header != "":
+						headerFields = append(headerFields, f)
+					default:
+						bodyFields = append(bodyFields, f)
+					}
 				}
 			}
-		}
 
-		// Path parameters (always explicit via path:"name" tag).
-		for _, f := range pathFields {
-			op.Parameters = append(op.Parameters, Parameter{
-				Name:        f.PathParam,
-				In:          "path",
-				Description: f.Doc,
-				Required:    true, // path params are always required
-				Schema:      sb.BuildSchema(f.Type),
-				Example:     nilIfEmpty(f.Example),
-			})
-		}
-
-		// Header parameters (header:"name" tag).
-		for _, f := range headerFields {
-			op.Parameters = append(op.Parameters, Parameter{
-				Name:        f.Header,
-				In:          "header",
-				Description: f.Doc,
-				Required:    f.Required,
-				Schema:      sb.BuildSchema(f.Type),
-				Example:     nilIfEmpty(f.Example),
-			})
-		}
-
-		// Explicit query parameters (query:"name" tag).
-		for _, f := range queryFields {
-			op.Parameters = append(op.Parameters, Parameter{
-				Name:        f.QueryParam,
-				In:          "query",
-				Description: f.Doc,
-				Required:    f.Required,
-				Schema:      sb.BuildSchema(f.Type),
-				Example:     nilIfEmpty(f.Example),
-			})
-		}
-
-		// For GET/DELETE the remaining fields become implicit query parameters.
-		// For POST/PUT/PATCH they go into the JSON request body.
-		if method == "GET" || method == "DELETE" {
-			for _, f := range bodyFields {
-				jsonName := f.JSONName
-				if jsonName == "" {
-					jsonName = strings.ToLower(f.Name[:1]) + f.Name[1:]
-				}
+			for _, f := range pathFields {
 				op.Parameters = append(op.Parameters, Parameter{
-					Name:        jsonName,
+					Name:        f.PathParam,
+					In:          "path",
+					Description: f.Doc,
+					Required:    true,
+					Schema:      sb.BuildSchema(f.Type),
+					Example:     nilIfEmpty(f.Example),
+				})
+			}
+
+			for _, f := range headerFields {
+				op.Parameters = append(op.Parameters, Parameter{
+					Name:        f.Header,
+					In:          "header",
+					Description: f.Doc,
+					Required:    f.Required,
+					Schema:      sb.BuildSchema(f.Type),
+					Example:     nilIfEmpty(f.Example),
+				})
+			}
+
+			for _, f := range queryFields {
+				op.Parameters = append(op.Parameters, Parameter{
+					Name:        f.QueryParam,
 					In:          "query",
 					Description: f.Doc,
 					Required:    f.Required,
@@ -216,48 +215,55 @@ func (b *Builder) buildOperation(
 					Example:     nilIfEmpty(f.Example),
 				})
 			}
-		} else if len(bodyFields) > 0 || (typeInfo != nil && len(typeInfo.Fields) == len(pathFields)) {
-			// Ensure request type is in components even when all fields are path params.
-			sb.BuildSchemaByName(opInfo.RequestType)
-			op.RequestBody = &RequestBody{
-				Required: true,
-				Content: map[string]*MediaType{
-					"application/json": {
-						Schema: &schema.Schema{Ref: "#/components/schemas/" + opInfo.RequestType},
+
+			// For GET/DELETE the remaining fields become implicit query parameters.
+			// For POST/PUT/PATCH they go into the JSON request body.
+			if method == "GET" || method == "DELETE" {
+				for _, f := range bodyFields {
+					jsonName := f.JSONName
+					if jsonName == "" {
+						jsonName = strings.ToLower(f.Name[:1]) + f.Name[1:]
+					}
+					op.Parameters = append(op.Parameters, Parameter{
+						Name:        jsonName,
+						In:          "query",
+						Description: f.Doc,
+						Required:    f.Required,
+						Schema:      sb.BuildSchema(f.Type),
+						Example:     nilIfEmpty(f.Example),
+					})
+				}
+			} else if len(bodyFields) > 0 || (typeInfo != nil && len(typeInfo.Fields) == len(pathFields)) {
+				op.RequestBody = &RequestBody{
+					Required: true,
+					Content: map[string]*MediaType{
+						"application/json": {Schema: sb.BuildSchema(reqRef)},
 					},
-				},
-			}
-		} else if len(bodyFields) == 0 && typeInfo != nil {
-			// POST/PUT/PATCH with no body fields (all are path/query params) — skip body.
-		} else {
-			sb.BuildSchemaByName(opInfo.RequestType)
-			op.RequestBody = &RequestBody{
-				Required: true,
-				Content: map[string]*MediaType{
-					"application/json": {
-						Schema: &schema.Schema{Ref: "#/components/schemas/" + opInfo.RequestType},
+				}
+			} else if len(bodyFields) == 0 && typeInfo != nil {
+				// POST/PUT/PATCH with no body fields (all are path/query params) — skip body.
+			} else {
+				op.RequestBody = &RequestBody{
+					Required: true,
+					Content: map[string]*MediaType{
+						"application/json": {Schema: sb.BuildSchema(reqRef)},
 					},
-				},
+				}
 			}
 		}
 	}
 
-	// ---- Response handling -----------------------------------------------
-	if opInfo.ResponseType != "" {
-		sb.BuildSchemaByName(opInfo.ResponseType)
+	if opInfo.ResponseType != nil {
 		op.Responses["200"] = &Response{
 			Description: "OK",
 			Content: map[string]*MediaType{
-				"application/json": {
-					Schema: &schema.Schema{Ref: "#/components/schemas/" + opInfo.ResponseType},
-				},
+				"application/json": {Schema: sb.BuildSchema(opInfo.ResponseType)},
 			},
 		}
 	} else {
 		op.Responses["200"] = &Response{Description: "OK"}
 	}
 
-	// ---- Error responses -------------------------------------------------
 	for _, code := range ann.Errors {
 		op.Responses[strconv.Itoa(code)] = &Response{
 			Description: httpStatusText(code),
@@ -272,7 +278,7 @@ func (b *Builder) buildOperation(
 	return op, nil
 }
 
-func nilIfEmpty(s string) interface{} {
+func nilIfEmpty(s string) any {
 	if s == "" {
 		return nil
 	}

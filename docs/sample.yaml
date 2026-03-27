@@ -187,8 +187,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/HealthResponse'
-security:
-    - bearer: []
 components:
     schemas:
         CreateUserRequest:
@@ -296,9 +294,3 @@ components:
             properties:
                 user:
                     $ref: '#/components/schemas/UserDTO'
-    securitySchemes:
-        bearer:
-            type: http
-            scheme: bearer
-            bearerFormat: JWT
-            description: 'JWT Bearer token — pass as: Authorization: Bearer <token>'

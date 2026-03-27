@@ -62,11 +62,11 @@ func TestParseDir_HappyPath(t *testing.T) {
 	if op.Annotation.Summary != "Hello world" {
 		t.Errorf("unexpected summary: %s", op.Annotation.Summary)
 	}
-	if op.RequestType != "HelloRequest" {
-		t.Errorf("expected HelloRequest, got %s", op.RequestType)
+	if op.RequestType == nil || op.RequestType.Name != "HelloRequest" {
+		t.Errorf("expected HelloRequest, got %v", op.RequestType)
 	}
-	if op.ResponseType != "HelloResponse" {
-		t.Errorf("expected HelloResponse, got %s", op.ResponseType)
+	if op.ResponseType == nil || op.ResponseType.Name != "HelloResponse" {
+		t.Errorf("expected HelloResponse, got %v", op.ResponseType)
 	}
 	if len(op.Annotation.Errors) != 2 {
 		t.Errorf("expected 2 error codes, got %d", len(op.Annotation.Errors))
@@ -137,6 +137,207 @@ type Handler struct{}
 	}
 	if len(p.Operations()) != 0 {
 		t.Fatalf("expected 0 operations, got %d", len(p.Operations()))
+	}
+}
+
+func TestParseDir_NoCtxSignature(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+// apiary:operation GET /health
+// summary: Health check
+// security: none
+func (h *Handler) Health(req HealthRequest) (HealthResponse, error) {
+	return HealthResponse{}, nil
+}
+
+type Handler struct{}
+type HealthRequest struct{}
+type HealthResponse struct {
+	Status string ` + "`" + `json:"status"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "health.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation for no-ctx signature, got %d", len(ops))
+	}
+	if ops[0].RequestType == nil || ops[0].RequestType.Name != "HealthRequest" {
+		t.Errorf("expected HealthRequest, got %v", ops[0].RequestType)
+	}
+	if ops[0].Annotation.Security[0] != "none" {
+		t.Errorf("expected security none, got %v", ops[0].Annotation.Security)
+	}
+}
+
+func TestParseDir_NoParamsSignature(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+// apiary:operation GET /ping
+// summary: Ping
+func (h *Handler) Ping() (PingResponse, error) {
+	return PingResponse{}, nil
+}
+
+type Handler struct{}
+type PingResponse struct {
+	OK bool ` + "`" + `json:"ok"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "ping.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	if ops[0].RequestType != nil {
+		t.Errorf("expected nil RequestType, got %v", ops[0].RequestType)
+	}
+	if ops[0].ResponseType == nil || ops[0].ResponseType.Name != "PingResponse" {
+		t.Errorf("expected PingResponse, got %v", ops[0].ResponseType)
+	}
+}
+
+func TestParseDir_HeaderTag(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "context"
+
+// apiary:operation GET /api/v1/products
+// summary: List products
+func (h *Handler) ListProducts(ctx context.Context, req ProductsRequest) (struct{}, error) {
+	return struct{}{}, nil
+}
+
+type Handler struct{}
+type ProductsRequest struct {
+	Currency string ` + "`" + `header:"X-Currency" doc:"ISO 4217 currency" example:"RUB"` + "`" + `
+	Page     int    ` + "`" + `query:"page" default:"1"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "products.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	types := p.Types()
+	req, ok := types["ProductsRequest"]
+	if !ok {
+		t.Fatal("ProductsRequest not found")
+	}
+	var headerField, queryField *parser.FieldInfo
+	for _, f := range req.Fields {
+		if f.Header != "" {
+			headerField = f
+		}
+		if f.QueryParam != "" {
+			queryField = f
+		}
+	}
+	if headerField == nil {
+		t.Fatal("expected a field with header tag")
+	}
+	if headerField.Header != "X-Currency" {
+		t.Errorf("expected X-Currency, got %q", headerField.Header)
+	}
+	if queryField == nil {
+		t.Fatal("expected a field with query tag")
+	}
+}
+
+func TestParseDir_GinHandler(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "github.com/gin-gonic/gin"
+
+// apiary:operation GET /api/v1/users
+// summary: List users
+// request: ListUsersRequest
+// response: []UserDTO
+func ListUsers(c *gin.Context) {}
+
+type ListUsersRequest struct {
+	Page int ` + "`" + `query:"page"` + "`" + `
+}
+type UserDTO struct {
+	ID   int64  ` + "`" + `json:"id"` + "`" + `
+	Name string ` + "`" + `json:"name"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "users.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	op := ops[0]
+	if op.Annotation.Method != "GET" {
+		t.Errorf("expected GET, got %s", op.Annotation.Method)
+	}
+	if op.RequestType == nil || op.RequestType.Name != "ListUsersRequest" {
+		t.Errorf("expected ListUsersRequest, got %v", op.RequestType)
+	}
+	if op.ResponseType == nil || !op.ResponseType.IsSlice {
+		t.Errorf("expected slice response, got %v", op.ResponseType)
+	}
+	if op.ResponseType.Elem == nil || op.ResponseType.Elem.Name != "UserDTO" {
+		t.Errorf("expected UserDTO elem, got %v", op.ResponseType.Elem)
+	}
+}
+
+func TestParseDir_SliceResponse(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "context"
+
+// apiary:operation GET /api/v1/items
+// summary: List items
+func (h *Handler) ListItems(ctx context.Context) ([]ItemDTO, error) {
+	return nil, nil
+}
+
+type Handler struct{}
+type ItemDTO struct {
+	ID int64 ` + "`" + `json:"id"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "items.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	resp := ops[0].ResponseType
+	if resp == nil || !resp.IsSlice {
+		t.Fatalf("expected slice ResponseType, got %v", resp)
+	}
+	if resp.Elem == nil || resp.Elem.Name != "ItemDTO" {
+		t.Errorf("expected ItemDTO elem, got %v", resp.Elem)
 	}
 }
 

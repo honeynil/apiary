@@ -169,6 +169,81 @@ func TestBuildRecursiveStructNoPanic(t *testing.T) {
 	}
 }
 
+func TestBuildEmbeddedStructSchema(t *testing.T) {
+	types := map[string]*parser.TypeInfo{
+		"Base": {
+			Name:   "Base",
+			Fields: []*parser.FieldInfo{{Name: "ID", JSONName: "id", Type: &parser.TypeRef{Name: "int64"}}},
+		},
+		"Extended": {
+			Name:     "Extended",
+			Embedded: []string{"Base"},
+			Fields:   []*parser.FieldInfo{{Name: "Extra", JSONName: "extra", Type: &parser.TypeRef{Name: "string"}}},
+		},
+	}
+
+	b := schema.NewBuilder(types)
+	b.BuildSchema(&parser.TypeRef{Name: "Extended"})
+
+	comps := b.Components()
+	ext, ok := comps["Extended"]
+	if !ok {
+		t.Fatal("Extended not in components")
+	}
+	if len(ext.AllOf) != 2 {
+		t.Fatalf("expected allOf with 2 entries, got %d", len(ext.AllOf))
+	}
+	if ext.AllOf[0].Ref != "#/components/schemas/Base" {
+		t.Errorf("expected $ref to Base, got %q", ext.AllOf[0].Ref)
+	}
+	if _, ok := comps["Base"]; !ok {
+		t.Error("Base not registered in components")
+	}
+}
+
+func TestBuildEmbeddedOnlySchema(t *testing.T) {
+	// When there are only embedded fields and no own fields, allOf should not
+	// include an extra empty object schema.
+	types := map[string]*parser.TypeInfo{
+		"A":    {Name: "A", Fields: []*parser.FieldInfo{{Name: "X", JSONName: "x", Type: &parser.TypeRef{Name: "string"}}}},
+		"Wrap": {Name: "Wrap", Embedded: []string{"A"}},
+	}
+	b := schema.NewBuilder(types)
+	b.BuildSchema(&parser.TypeRef{Name: "Wrap"})
+
+	wrap := b.Components()["Wrap"]
+	if wrap == nil {
+		t.Fatal("Wrap not in components")
+	}
+	if len(wrap.AllOf) != 1 {
+		t.Errorf("expected allOf with 1 entry (no empty own-schema), got %d", len(wrap.AllOf))
+	}
+}
+
+func TestExternalTypeMappings(t *testing.T) {
+	b := schema.NewBuilder(nil)
+	cases := []struct{ name, wantType, wantFormat string }{
+		{"uuid.UUID", "string", "uuid"},
+		{"net.IP", "string", "ipv4"},
+		{"sql.NullString", "string", ""},
+		{"sql.NullInt64", "integer", "int64"},
+		{"sql.NullBool", "boolean", ""},
+		{"sql.NullTime", "string", "date-time"},
+		{"url.URL", "string", "uri"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := b.BuildSchema(&parser.TypeRef{Name: c.name})
+			if s.Type != c.wantType {
+				t.Errorf("type: want %q got %q", c.wantType, s.Type)
+			}
+			if s.Format != c.wantFormat {
+				t.Errorf("format: want %q got %q", c.wantFormat, s.Format)
+			}
+		})
+	}
+}
+
 func TestEnsureErrorResponse(t *testing.T) {
 	b := schema.NewBuilder(nil)
 	b.EnsureErrorResponse()

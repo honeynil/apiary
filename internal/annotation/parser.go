@@ -18,6 +18,11 @@ type Operation struct {
 	// A single element "none" means explicitly no security (overrides global).
 	// Nil means "inherit global security".
 	Security []string
+	// Request and Response are explicit type names from annotations.
+	// Used when the handler signature does not carry type information (e.g. gin).
+	// Supports plain names ("UserDTO") and slice syntax ("[]UserDTO").
+	Request  string
+	Response string
 }
 
 // Parse parses comment lines (without the "//" prefix and leading space) into
@@ -80,6 +85,10 @@ func Parse(lines []string) (*Operation, bool) {
 					op.Security = append(op.Security, s)
 				}
 			}
+		case "request":
+			op.Request = value
+		case "response":
+			op.Response = value
 		}
 	}
 

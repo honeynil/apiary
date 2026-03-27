@@ -33,8 +33,9 @@ type FieldInfo struct {
 
 // TypeInfo describes a parsed struct type.
 type TypeInfo struct {
-	Name   string
-	Fields []*FieldInfo
+	Name     string
+	Fields   []*FieldInfo
+	Embedded []string // type names of embedded (anonymous) structs, for allOf
 }
 
 // parseTypeExpr converts an AST type expression to a TypeRef.
@@ -182,6 +183,14 @@ func parseStructType(name string, st *ast.StructType) *TypeInfo {
 		return info
 	}
 	for _, field := range st.Fields.List {
+		if len(field.Names) == 0 {
+			// Anonymous / embedded field — record for allOf resolution.
+			ref := parseTypeExpr(field.Type)
+			if ref != nil && ref.Name != "" && ref.Name != "interface{}" {
+				info.Embedded = append(info.Embedded, ref.Name)
+			}
+			continue
+		}
 		info.Fields = append(info.Fields, parseStructField(field)...)
 	}
 	return info

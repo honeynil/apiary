@@ -91,3 +91,60 @@ func TestParse_DescriptionWithColon(t *testing.T) {
 		t.Errorf("unexpected description: %q", op.Description)
 	}
 }
+
+func TestParse_SecurityBearer(t *testing.T) {
+	lines := []string{
+		"apiary:operation GET /api/v1/me",
+		"summary: Current user",
+		"security: bearer",
+	}
+	op, ok := annotation.Parse(lines)
+	if !ok {
+		t.Fatal("expected parse to succeed")
+	}
+	if len(op.Security) != 1 || op.Security[0] != "bearer" {
+		t.Errorf("expected security [bearer], got %v", op.Security)
+	}
+}
+
+func TestParse_SecurityNone(t *testing.T) {
+	lines := []string{
+		"apiary:operation POST /api/v1/auth/login",
+		"security: none",
+	}
+	op, ok := annotation.Parse(lines)
+	if !ok {
+		t.Fatal("expected parse to succeed")
+	}
+	if len(op.Security) != 1 || op.Security[0] != "none" {
+		t.Errorf("expected security [none], got %v", op.Security)
+	}
+}
+
+func TestParse_SecurityMultiple(t *testing.T) {
+	lines := []string{
+		"apiary:operation GET /api/v1/admin",
+		"security: bearer, apikey",
+	}
+	op, ok := annotation.Parse(lines)
+	if !ok {
+		t.Fatal("expected parse to succeed")
+	}
+	if len(op.Security) != 2 {
+		t.Errorf("expected 2 security schemes, got %v", op.Security)
+	}
+}
+
+func TestParse_SecurityNilWhenAbsent(t *testing.T) {
+	lines := []string{
+		"apiary:operation GET /api/v1/items",
+		"summary: List items",
+	}
+	op, ok := annotation.Parse(lines)
+	if !ok {
+		t.Fatal("expected parse to succeed")
+	}
+	if op.Security != nil {
+		t.Errorf("expected nil security (inherit global), got %v", op.Security)
+	}
+}

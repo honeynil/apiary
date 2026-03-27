@@ -26,7 +26,8 @@ func main() {
 	out := flag.String("out", "openapi.yaml", "output file path (use - for stdout)")
 	title := flag.String("title", "API", "API title")
 	version := flag.String("version", "0.0.1", "API version")
-	security := flag.String("security", "", "comma-separated global security schemes: bearer, basic, apikey")
+	description := flag.String("description", "", "API description (info.description)")
+	security := flag.String("security", "", "comma-separated global security schemes, e.g. bearer or adminAuth:bearer")
 	flag.Parse()
 
 	patterns := flag.Args()
@@ -52,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	builder := openapi.NewBuilder(*title, *version)
+	builder := openapi.NewBuilder(*title, *version).WithDescription(*description)
 	if *security != "" {
 		for _, s := range strings.Split(*security, ",") {
 			s = strings.TrimSpace(s)
@@ -94,7 +95,6 @@ func resolvePatterns(patterns []string) ([]string, error) {
 	seen := make(map[string]bool)
 
 	add := func(dir string) {
-		// Normalise path so that "." and "" both map to ".".
 		if dir == "" {
 			dir = "."
 		}
@@ -105,7 +105,6 @@ func resolvePatterns(patterns []string) ([]string, error) {
 	}
 
 	for _, pattern := range patterns {
-		// Detect recursive pattern (ending in /... or equal to ...)
 		recursive := strings.HasSuffix(pattern, "/...") ||
 			pattern == "..." ||
 			pattern == "./..."

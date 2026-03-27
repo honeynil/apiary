@@ -70,7 +70,8 @@ apiary -out docs/openapi.yaml ./internal/handler/... ./internal/dto/...
 | `-out` | `openapi.yaml` | Output file path. Use `-` for stdout. |
 | `-title` | `API` | Value of `info.title` in the spec |
 | `-version` | `0.0.1` | Value of `info.version` in the spec |
-| `-security` | _(none)_ | Comma-separated global security schemes: `bearer`, `basic`, `apikey` |
+| `-description` | _(none)_ | Value of `info.description` in the spec |
+| `-security` | _(none)_ | Global security scheme. Format: `bearer`, `basic`, `apikey`, or `myName:bearer` for a custom scheme name |
 
 ---
 
@@ -96,6 +97,7 @@ func (h *T) A(ctx context.Context, req MyRequest) (MyResponse, error) // standar
 func (h *T) B(req MyRequest) (MyResponse, error)                       // no ctx
 func (h *T) C(ctx context.Context) (MyResponse, error)                 // no request body
 func (h *T) D() (MyResponse, error)                                    // health-check style
+func Handler(c *gin.Context)                                           // gin (see below)
 ```
 
 ---
@@ -155,6 +157,49 @@ Built-in scheme names:
 
 ---
 
+## Gin support
+
+Apiary recognises `func(c *gin.Context)` handlers. Because the signature carries
+no type information, request and response types are specified via annotations:
+
+```go
+// apiary:operation POST /api/v1/tasks
+// summary: Create task
+// tags: tasks
+// request: CreateTaskRequest   ← required for gin handlers
+// response: TaskDTO            ← required for gin handlers
+// errors: 400,401,422,500
+func CreateTask(c *gin.Context) {
+    var req CreateTaskRequest
+    if err := c.ShouldBindJSON(&req); err != nil { ... }
+    // ...
+}
+```
+
+Slice responses work too:
+
+```go
+// apiary:operation GET /api/v1/tasks
+// summary: List tasks
+// request: ListTasksRequest
+// response: []TaskDTO
+// errors: 401,500
+func ListTasks(c *gin.Context) { ... }
+```
+
+Path, query, and header parameters are still driven by struct tags — the same
+`path:`, `query:`, and `header:` tags used with standard handlers:
+
+```go
+type GetTaskRequest struct {
+    ID int64 `path:"id" validate:"required"`
+}
+```
+
+See [testdata/gin/](testdata/gin/) for a full task-manager example.
+
+---
+
 ## Error responses
 
 `errors: 400,401,500` adds a response entry for each code. All error responses
@@ -188,14 +233,26 @@ If a type cannot be resolved, apiary prints a warning and emits
 
 ---
 
-## Example
+## Examples
 
-See [testdata/sample/](testdata/sample/) for a complete annotated service with
-path params, query params, header params, security, and a no-ctx handler.
+**Standard handlers** — [testdata/router/](testdata/router/)
 
 ```bash
-apiary -security bearer -title "Sample API" -version "0.1.0" \
-       -out docs/sample.yaml ./testdata/sample
+apiary -security bearer -title "Task Manager API" -version "1.0.0" \
+       -out docs/tasks.yaml ./testdata/router
+```
+
+**Gin handlers** — [testdata/gin/](testdata/gin/)
+
+```bash
+apiary -security bearer -title "Task Manager API (gin)" -version "1.0.0" \
+       -out docs/tasks_gin.yaml ./testdata/gin
+```
+
+Or generate all at once:
+
+```bash
+make generate
 ```
 
 ---
@@ -211,7 +268,18 @@ apiary -security bearer -title "Sample API" -version "0.1.0" \
 | `float32` | `{type: number, format: float}` |
 | `float64` | `{type: number, format: double}` |
 | `time.Time` | `{type: string, format: date-time}` |
+| `time.Duration` | `{type: integer, format: int64}` |
+| `uuid.UUID` | `{type: string, format: uuid}` |
+| `net.IP` | `{type: string, format: ipv4}` |
+| `url.URL` | `{type: string, format: uri}` |
+| `json.RawMessage` | `{}` (any) |
+| `sql.NullString` | `{type: string}` |
+| `sql.NullInt64` | `{type: integer, format: int64}` |
+| `sql.NullBool` | `{type: boolean}` |
+| `sql.NullTime` | `{type: string, format: date-time}` |
 | `[]T` | `{type: array, items: ...}` |
 | `map[K]V` | `{type: object, additionalProperties: ...}` |
 | Struct | `{$ref: '#/components/schemas/TypeName'}` |
+| Embedded struct | `allOf: [$ref: Base, {own fields}]` |
 | `interface{}` / `any` | `{}` (any) |
+| Other `pkg.Type` | `{type: string}` (fallback) |

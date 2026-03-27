@@ -16,9 +16,11 @@ install:
 clean:
 	rm -rf bin/ $(OUTFILE)
 
-# Generate the spec for the bundled sample handlers.
+# Generate specs for all bundled examples.
 generate:
-	go run $(CMD) -out docs/sample.yaml -title "Sample API" -version "0.1.0" ./testdata/sample
+	go run $(CMD) -out docs/sample.yaml  -title "Sample API"              -version "0.1.0" ./testdata/sample
+	go run $(CMD) -out docs/tasks.yaml   -title "Task Manager API"        -version "1.0.0" -security bearer ./testdata/router
+	go run $(CMD) -out docs/tasks_gin.yaml -title "Task Manager API (gin)" -version "1.0.0" -security bearer ./testdata/gin
 
 lint:
 	golangci-lint run ./...
