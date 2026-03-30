@@ -205,11 +205,7 @@ func (b *Builder) buildFieldSchema(field *parser.FieldInfo) *Schema {
 			s.Default = field.Default
 		}
 		if enumInfo != nil {
-			vals := make([]any, len(enumInfo.Values))
-			for i, v := range enumInfo.Values {
-				vals[i] = v
-			}
-			s.Enum = vals
+			s.Enum = enumInfo.Values
 		}
 	}
 	return s

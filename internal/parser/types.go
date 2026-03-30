@@ -40,8 +40,8 @@ type TypeInfo struct {
 
 // EnumInfo describes a named Go type with a set of const values.
 type EnumInfo struct {
-	BaseType string   // underlying Go type (e.g. "string", "int")
-	Values   []string // const values in declaration order
+	BaseType string // underlying Go type (e.g. "string", "int")
+	Values   []any  // const values in declaration order (string or int)
 }
 
 // parseTypeExpr converts an AST type expression to a TypeRef.

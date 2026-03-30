@@ -377,7 +377,42 @@ type Item struct {
 		t.Fatalf("expected 3 values, got %d: %v", len(info.Values), info.Values)
 	}
 	if info.Values[0] != "active" || info.Values[1] != "pending" || info.Values[2] != "closed" {
-		t.Errorf("unexpected values: %v", info.Values)
+		t.Errorf("unexpected enum values: %v", info.Values)
+	}
+}
+
+func TestParseDir_EnumIota(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+type Role int
+
+const (
+	RoleAdmin Role = iota
+	RoleUser
+	RoleModerator
+)
+`
+	writeTempFile(t, dir, "role.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	enums := p.Enums()
+	info, ok := enums["Role"]
+	if !ok {
+		t.Fatal("Role enum not found")
+	}
+	if info.BaseType != "int" {
+		t.Errorf("expected base type int, got %q", info.BaseType)
+	}
+	if len(info.Values) != 3 {
+		t.Fatalf("expected 3 values, got %d: %v", len(info.Values), info.Values)
+	}
+	if info.Values[0] != 0 || info.Values[1] != 1 || info.Values[2] != 2 {
+		t.Errorf("unexpected iota values: %v", info.Values)
 	}
 }
 

@@ -254,7 +254,7 @@ func TestBuildEnumField(t *testing.T) {
 		},
 	}
 	enums := map[string]*parser.EnumInfo{
-		"ItemStatus": {BaseType: "string", Values: []string{"active", "archived", "draft"}},
+		"ItemStatus": {BaseType: "string", Values: []any{"active", "archived", "draft"}},
 	}
 
 	b := schema.NewBuilder(types, enums)

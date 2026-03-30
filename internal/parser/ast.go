@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/honeynil/apiary/internal/annotation"
@@ -120,16 +121,17 @@ func (p *Parser) parseFile(filename string) error {
 }
 
 // collectConsts extracts const values grouped by their named type.
-// Handles both explicit type (`const X Status = "active"`) and iota-inherited
-// type from a const block (`const ( A Status = iota; B; C )`).
+// Handles string literals, integer literals, and iota expressions.
 func (p *Parser) collectConsts(decl *ast.GenDecl) {
 	var currentType string
+	var useIota bool
+	iotaVal := 0
+
 	for _, spec := range decl.Specs {
 		vs, ok := spec.(*ast.ValueSpec)
 		if !ok {
 			continue
 		}
-		// Explicit type on this line resets the inherited type.
 		if vs.Type != nil {
 			if ident, ok := vs.Type.(*ast.Ident); ok {
 				currentType = ident.Name
@@ -142,44 +144,85 @@ func (p *Parser) collectConsts(decl *ast.GenDecl) {
 		}
 		baseType, ok := p.typeAliases[currentType]
 		if !ok {
+			iotaVal++
 			continue
 		}
+
+		// Determine if this line uses iota or has explicit values.
+		hasValues := len(vs.Values) > 0
+		if hasValues && isIotaExpr(vs.Values[0]) {
+			useIota = true
+		}
+
 		for i, nameIdent := range vs.Names {
 			if nameIdent.Name == "_" {
+				iotaVal++
 				continue
 			}
-			val := ""
-			if i < len(vs.Values) {
-				val = constValueLiteral(vs.Values[i])
+
+			var val any
+			if useIota || !hasValues {
+				// iota-based or inherited iota line (no values = previous iota continues)
+				if baseType == "string" {
+					// string iota doesn't make sense, skip
+					iotaVal++
+					continue
+				}
+				val = iotaVal
+			} else if i < len(vs.Values) {
+				val = constLiteral(vs.Values[i], baseType)
 			}
-			if val == "" {
+
+			if val == nil {
+				iotaVal++
 				continue
 			}
+
 			info := p.enums[currentType]
 			if info == nil {
 				info = &EnumInfo{BaseType: baseType}
 				p.enums[currentType] = info
 			}
 			info.Values = append(info.Values, val)
+			iotaVal++
 		}
 	}
 }
 
-// constValueLiteral extracts the literal value from a const expression.
-func constValueLiteral(expr ast.Expr) string {
+// isIotaExpr returns true if the expression is `iota` or contains iota
+// (e.g. `iota + 1`).
+func isIotaExpr(expr ast.Expr) bool {
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return v.Name == "iota"
+	case *ast.BinaryExpr:
+		return isIotaExpr(v.X) || isIotaExpr(v.Y)
+	case *ast.ParenExpr:
+		return isIotaExpr(v.X)
+	}
+	return false
+}
+
+// constLiteral extracts the Go literal value, returning string for string
+// base types and int for integer base types.
+func constLiteral(expr ast.Expr, baseType string) any {
 	switch v := expr.(type) {
 	case *ast.BasicLit:
 		s := v.Value
-		// Strip quotes from string literals.
 		if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
 			return s[1 : len(s)-1]
 		}
-		return s
-	case *ast.Ident:
-		// iota or references to other consts — skip for now.
-		return ""
+		// Integer literal
+		if baseType == "string" {
+			return s
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return s
+		}
+		return n
 	}
-	return ""
+	return nil
 }
 
 // parseFunction tries to extract an OperationInfo from a function declaration.
