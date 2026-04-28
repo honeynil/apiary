@@ -1,11 +1,32 @@
-# apiary
+<p align="center">
+  <img src="media/logo.png" alt="apiary logo" width="200">
+</p>
+
+<h1 align="center">apiary</h1>
+
+<p align="center">
+  <em>OpenAPI 3.1 generator for Go — driven by types, not comment soup.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/honeynil/apiary/actions/workflows/ci.yml"><img src="https://github.com/honeynil/apiary/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://goreportcard.com/report/github.com/honeynil/apiary"><img src="https://goreportcard.com/badge/github.com/honeynil/apiary" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/honeynil/apiary"><img src="https://pkg.go.dev/badge/github.com/honeynil/apiary.svg" alt="Go Reference"></a>
+  <a href="https://github.com/honeynil/apiary/releases"><img src="https://img.shields.io/github/v/release/honeynil/apiary?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/honeynil/apiary" alt="License"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/honeynil/apiary" alt="Go version">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white" alt="OpenAPI 3.1">
+  <img src="https://img.shields.io/badge/framework-net%2Fhttp%20%7C%20gin-00ADD8?logo=go&logoColor=white" alt="net/http | gin">
+  <img src="https://img.shields.io/badge/zero-runtime%20deps-brightgreen" alt="Zero runtime deps">
+</p>
+
+---
 
 **apiary** generates an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) YAML
-document from annotated Go source code — no annotation-heavy comments, no code
-generation framework, no Swagger v2.
-
-Think of it as **sqlc for OpenAPI**: you write ordinary Go code, add a minimal
-marker comment, and the tool does the rest.
+document from annotated Go source code.
 
 ---
 

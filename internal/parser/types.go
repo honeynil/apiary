@@ -153,7 +153,7 @@ func parseStructField(field *ast.Field) []*FieldInfo {
 	for _, nameIdent := range field.Names {
 		name := nameIdent.Name
 		// Skip unexported fields
-		if len(name) == 0 || !(name[0] >= 'A' && name[0] <= 'Z') {
+		if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
 			continue
 		}
 
