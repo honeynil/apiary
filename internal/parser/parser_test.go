@@ -304,6 +304,156 @@ type UserDTO struct {
 	}
 }
 
+func TestParseDir_StdlibHTTPHandler_FreeFunc(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "net/http"
+
+// apiary:operation POST /api/v1/auth/login
+// summary: Login
+// request: LoginRequest
+// response: LoginResponse
+func Login(w http.ResponseWriter, r *http.Request) {}
+
+type LoginRequest struct {
+	User string ` + "`" + `json:"user"` + "`" + `
+}
+type LoginResponse struct {
+	Token string ` + "`" + `json:"token"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "login.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	op := ops[0]
+	if op.RequestType == nil || op.RequestType.Name != "LoginRequest" {
+		t.Errorf("expected LoginRequest, got %v", op.RequestType)
+	}
+	if op.ResponseType == nil || op.ResponseType.Name != "LoginResponse" {
+		t.Errorf("expected LoginResponse, got %v", op.ResponseType)
+	}
+}
+
+func TestParseDir_StdlibHTTPHandler_Method(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "net/http"
+
+type AuthHandler struct{}
+
+// apiary:operation POST /api/v1/auth/login
+// summary: Login
+// request: LoginRequest
+// response: LoginResponse
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {}
+
+type LoginRequest struct {
+	User string ` + "`" + `json:"user"` + "`" + `
+}
+type LoginResponse struct {
+	Token string ` + "`" + `json:"token"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "auth.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	op := ops[0]
+	if op.RequestType == nil || op.RequestType.Name != "LoginRequest" {
+		t.Errorf("expected LoginRequest, got %v", op.RequestType)
+	}
+	if op.ResponseType == nil || op.ResponseType.Name != "LoginResponse" {
+		t.Errorf("expected LoginResponse, got %v", op.ResponseType)
+	}
+}
+
+func TestParseDir_StdlibHTTPHandler_NoRequestAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	code := `package sample
+
+import "net/http"
+
+// apiary:operation POST /api/v1/ping
+// summary: Ping
+// response: PingResponse
+func Ping(w http.ResponseWriter, r *http.Request) {}
+
+type PingResponse struct {
+	OK bool ` + "`" + `json:"ok"` + "`" + `
+}
+`
+	writeTempFile(t, dir, "ping.go", code)
+
+	p := parser.New()
+	if err := p.ParseDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	ops := p.Operations()
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	if ops[0].RequestType != nil {
+		t.Errorf("expected nil RequestType, got %v", ops[0].RequestType)
+	}
+}
+
+func TestParseDir_StdlibHTTPHandler_WrongShapes(t *testing.T) {
+	cases := map[string]string{
+		"returns_error": `package sample
+import "net/http"
+// apiary:operation GET /a
+// summary: x
+// response: R
+func F(w http.ResponseWriter, r *http.Request) error { return nil }
+type R struct{}
+`,
+		"writer_ptr": `package sample
+import "net/http"
+// apiary:operation GET /a
+// summary: x
+// response: R
+func F(w *http.ResponseWriter, r *http.Request) {}
+type R struct{}
+`,
+		"one_param": `package sample
+import "net/http"
+// apiary:operation GET /a
+// summary: x
+// response: R
+func F(w http.ResponseWriter) {}
+type R struct{}
+`,
+	}
+	for name, code := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTempFile(t, dir, "f.go", code)
+			p := parser.New()
+			if err := p.ParseDir(dir); err != nil {
+				t.Fatal(err)
+			}
+			if ops := p.Operations(); len(ops) != 0 {
+				t.Errorf("expected 0 operations, got %d", len(ops))
+			}
+		})
+	}
+}
+
 func TestParseDir_SliceResponse(t *testing.T) {
 	dir := t.TempDir()
 	code := `package sample

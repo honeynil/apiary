@@ -245,9 +245,9 @@ func (p *Parser) parseFunction(fn *ast.FuncDecl) *OperationInfo {
 		return nil
 	}
 
-	// Gin-style handler: func(c *gin.Context) — no return types.
-	// Types must come from annotation request:/response: fields.
-	if isGinHandler(fn) {
+	// Framework handlers carry no type info in signature — types come
+	// from annotation request:/response: fields.
+	if isGinHandler(fn) || isStdlibHTTPHandler(fn) {
 		return &OperationInfo{
 			Annotation:   op,
 			RequestType:  parseAnnotationTypeRef(op.Request),
@@ -340,6 +340,56 @@ func isGinHandler(fn *ast.FuncDecl) bool {
 	}
 	pkg, ok := sel.X.(*ast.Ident)
 	return ok && pkg.Name == "gin" && sel.Sel.Name == "Context"
+}
+
+// isStdlibHTTPHandler returns true when fn matches:
+//   func(w http.ResponseWriter, r *http.Request)
+// Both method receivers and free functions are accepted.
+func isStdlibHTTPHandler(fn *ast.FuncDecl) bool {
+	if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 {
+		return false
+	}
+	if fn.Type.Params == nil {
+		return false
+	}
+	var types []ast.Expr
+	for _, p := range fn.Type.Params.List {
+		n := len(p.Names)
+		if n == 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			types = append(types, p.Type)
+		}
+	}
+	if len(types) != 2 {
+		return false
+	}
+	return isHTTPResponseWriter(types[0]) && isHTTPRequestPtr(types[1])
+}
+
+// isHTTPResponseWriter matches `http.ResponseWriter` (no pointer).
+func isHTTPResponseWriter(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "http" && sel.Sel.Name == "ResponseWriter"
+}
+
+// isHTTPRequestPtr matches `*http.Request`.
+func isHTTPRequestPtr(expr ast.Expr) bool {
+	star, ok := expr.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	sel, ok := star.X.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "http" && sel.Sel.Name == "Request"
 }
 
 // parseAnnotationTypeRef converts an annotation type string to a TypeRef.

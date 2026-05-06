@@ -119,6 +119,7 @@ func (h *T) B(req MyRequest) (MyResponse, error)                       // no ctx
 func (h *T) C(ctx context.Context) (MyResponse, error)                 // no request body
 func (h *T) D() (MyResponse, error)                                    // health-check style
 func Handler(c *gin.Context)                                           // gin (see below)
+func Handler(w http.ResponseWriter, r *http.Request)                   // net/http (see below)
 ```
 
 ---
@@ -218,6 +219,30 @@ type GetTaskRequest struct {
 ```
 
 See [testdata/gin/](testdata/gin/) for a full task-manager example.
+
+---
+
+## net/http support
+
+Apiary recognises `func(w http.ResponseWriter, r *http.Request)` handlers (both
+methods and free functions). The signature carries no type information, so
+request and response types are specified via annotations — same as gin:
+
+```go
+// apiary:operation POST /api/v1/auth/login
+// summary: Authenticate
+// tags: auth
+// security: none
+// request: LoginRequest
+// response: LoginResponse
+// errors: 400,401
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+    // decode r.Body, write w
+}
+```
+
+Path, query, and header parameters use the same struct tags as standard and
+gin handlers.
 
 ---
 
