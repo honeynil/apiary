@@ -343,7 +343,9 @@ func isGinHandler(fn *ast.FuncDecl) bool {
 }
 
 // isStdlibHTTPHandler returns true when fn matches:
-//   func(w http.ResponseWriter, r *http.Request)
+//
+//	func(w http.ResponseWriter, r *http.Request)
+//
 // Both method receivers and free functions are accepted.
 func isStdlibHTTPHandler(fn *ast.FuncDecl) bool {
 	if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 {
